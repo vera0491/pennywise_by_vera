@@ -1,0 +1,10 @@
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "B", "Q", "N", "S", "COM", "I"]
+
+[lint.flake8-quotes]
+inline-quotes = "single"
+
+[lint.isort]
+lines-after-imports = 2
