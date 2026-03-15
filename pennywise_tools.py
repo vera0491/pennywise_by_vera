@@ -1,8 +1,12 @@
 import csv
 import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-
-# 定義這是一個「功能」，以後只要呼叫 get_expense_report() 它就會開始工作
+# ==========================================
+# 工具 1：算報表 (get_expense_report)
+# ==========================================
 def get_expense_report():
     filename = 'pennywise.csv'
 
@@ -48,53 +52,76 @@ def get_expense_report():
             total_spend += amount
 
             if who == 'Vera':
-                vera_paid += amount  # noqa: E701
+                vera_paid += amount
             elif who == 'Shen':
                 shen_paid += amount
 
-            # 字典統計 (使用 get 簡化寫法：如果沒有就給 0，有就 + amount)
+            # 字典統計
             category_stats[category] = category_stats.get(category, 0) + amount
             month_stats[current_month] = month_stats.get(current_month, 0) + amount
             weekday_stats[weekday] = weekday_stats.get(weekday, 0) + amount
             hour_stats[current_hour] = hour_stats.get(current_hour, 0) + amount
 
-            # ==========================================
-            # 4. 製作報表 (這是跟之前最不一樣的地方！)
-            # ==========================================
+    # 4. 製作報表
+    result = ''
 
-            # 準備一張空白紙 (空字串)
-            result = ''
+    result += '=' * 30 + '\n'
+    result += f'💰 總消費金額： ${total_spend}\n'
+    result += '=' * 30 + '\n'
 
-            # 開始一行一行寫進去 (+= 代表「接續寫在後面」)
-            # 記得每一行後面都要加 "\n"，不然字會全部黏在一起
+    result += '\n👤 付款人分析：\n'
+    result += f'   - Vera 付款：${vera_paid}\n'
+    result += f'   - Shen 付款：${shen_paid}\n'
 
-            result += '=' * 30 + '\n'
-            result += f'💰 總消費金額： ${total_spend}\n'
-            result += '=' * 30 + '\n'
+    result += '\n🍰 分類消費排行：\n'
+    for cat, cost in category_stats.items():
+        result += f'   - {cat}: ${cost}\n'
 
-            result += '\n👤 付款人分析：\n'
-            result += f'   - Vera 付款：${vera_paid}\n'
-            result += f'   - Shen 付款：${shen_paid}\n'
+    result += '\n🗓️  月份收支表：\n'
+    for m in sorted(month_stats.keys()):
+        result += f'   - {m}: ${month_stats[m]}\n'
 
-            result += '\n🍰 分類消費排行：\n'
-            for cat, cost in category_stats.items():
-                result += f'   - {cat}: ${cost}\n'
+    result += '\n📅 週間消費習慣：\n'
+    days_order = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
+    for day in days_order:
+        if day in weekday_stats:
+            result += f'   - {day}: ${weekday_stats[day]}\n'
 
-            result += '\n🗓️  月份收支表：\n'
-            for m in sorted(month_stats.keys()):
-                result += f'   - {m}: ${month_stats[m]}\n'
+    result += '\n⏰ 花錢時段分析：\n'
+    for hour in sorted(hour_stats.keys()):
+        result += f'   - {hour}點: ${hour_stats[hour]}\n'
 
-            result += '\n📅 週間消費習慣：\n'
-            days_order = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
-            for day in days_order:
-                if day in weekday_stats:
-                    result += f'   - {day}: ${weekday_stats[day]}\n'
+    result += '\n' + '=' * 30
 
-            result += '\n⏰ 花錢時段分析：\n'
-            for hour in sorted(hour_stats.keys()):
-                result += f'   - {hour}點: ${hour_stats[hour]}\n'
+    return result
 
-            result += '\n' + '=' * 30
+# ==========================================
+# 工具 2：雲端記帳 (save_expense)
+# ==========================================
+def save_expense(item, amount, category, who, payment):
+    # 1. 準備時間戳記
+    now = datetime.now()
+    current_date = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M:%S")
+    week_days = ["一", "二", "三", "四", "五", "六", "日"]
+    current_weekday = f"週{week_days[now.weekday()]}"
 
-            # ★ 關鍵動作：把寫好的紙條交出去
-            return result
+    try:
+        # 2. 拿出鑰匙，連線 Google Sheets
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+        client = gspread.authorize(creds)
+        
+        # 打開記帳本
+        sheet = client.open('Pennywise記帳本').sheet1
+
+        # 3. 準備要寫入的資料
+        row_data = [current_date, current_weekday, current_time, category, item, amount, who, payment]
+
+        # 4. 寫入雲端試算表
+        sheet.append_row(row_data)
+
+        return f"☁️ ✅ 雲端記帳成功！已儲存：{item} ${amount}"
+
+    except Exception as e:
+        return f"❌ 雲端存檔失敗：{e}"
