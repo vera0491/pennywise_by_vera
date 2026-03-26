@@ -29,7 +29,7 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- 按鈕點擊後的處理 ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # 消除 loading 動畫
+    await query.answer()
 
     data = query.data
     await query.edit_message_text('⏳ 讀取中...')
@@ -45,7 +45,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(text)
 
-# --- 記帳處理（不變）---
+# --- 解析記帳訊息 ---
+# 格式規則：最後一段是 code（含 v/s/c/cc），倒數第二段是金額（數字），前面全是項目名稱
+# 例如：「茅乃川 1098 vcc」→ item=茅乃川, amount=1098, code=vcc
+# 例如：「out of office不在辦公室 拿鐵 180 vc」→ item=out of office不在辦公室 拿鐵, amount=180, code=vc
+def parse_expense(raw_input):
+    parts = raw_input.strip().split()
+
+    if len(parts) < 3:
+        return None  # 至少要有 item + amount + code 三段
+
+    code = parts[-1]          # 最後一段是 code
+    amount_str = parts[-2]    # 倒數第二段是金額
+    item = ' '.join(parts[:-2])  # 前面所有的都是項目名稱（允許空格）
+
+    # 驗證：金額必須是數字，code 必須含有 v 或 s
+    if not amount_str.isdigit():
+        return None
+    if 'v' not in code and 's' not in code:
+        return None
+
+    who = 'Vera' if 'v' in code else ('Shen' if 's' in code else 'N/A')
+    payment = '信用卡' if 'cc' in code else ('現金' if 'c' in code else 'N/A')
+
+    return {
+        'item': item,
+        'amount': amount_str,
+        'code': code,
+        'who': who,
+        'payment': payment,
+    }
+
+# --- 記帳處理 ---
 async def process_data(update: Update, is_edit=False):
     msg = update.edited_message if is_edit else update.message
     if not msg or not msg.text:
@@ -54,16 +85,15 @@ async def process_data(update: Update, is_edit=False):
     raw_input = msg.text
     msg_id = msg.message_id
 
-    try:
-        parts = raw_input.split(' ')
-        if len(parts) < 3:
-            return
-        if not parts[1].isdigit():
-            return  # 第二段不是數字，不是記帳格式
+    parsed = parse_expense(raw_input)
+    if not parsed:
+        return  # 靜默忽略，不是記帳格式
 
-        item, amount, code = parts[0], parts[1], parts[2]
-        who     = 'Vera' if 'v' in code else ('Shen' if 's' in code else 'N/A')
-        payment = '信用卡' if 'cc' in code else ('現金' if 'c' in code else 'N/A')
+    try:
+        item    = parsed['item']
+        amount  = parsed['amount']
+        who     = parsed['who']
+        payment = parsed['payment']
 
         keyword_config = pennywise_tools.load_keywords_from_sheet()
         category, budget, attr = pennywise_tools.classify_item(item, keyword_config)
@@ -99,8 +129,10 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('sum',    cmd_sum))
     app.add_handler(CommandHandler('report', cmd_report))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.TEXT, handle_message))
+
+    # ⚠️ 修正順序：EDITED_MESSAGE 必須在一般 TEXT 之前註冊
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE & filters.TEXT, handle_edit))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print('🚀 機器人上線！/sum 快速報表，/report 選單報表')
-    app.run_polling()
+    app.run_polling(allowed_updates=Update.ALL_TYPES)  # ✅ 必須加這個才能收到 edited_message

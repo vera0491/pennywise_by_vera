@@ -9,3 +9,6 @@ wheels/
 # Virtual environments
 .venv
 credentials.json
+.DS_Store
+keep_alive.sh
+credentials.json
