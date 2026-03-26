@@ -80,6 +80,22 @@ def add_keyword_to_sheet(keyword, budget, category, attr):
         return f'❌ 新增關鍵字失敗: {e}'
 
 
+def backfill_category(msg_id, category, budget, attr):
+    """用 msg_id 找到 Sheet 裡的那一列，把分類、預算、屬性從 N/A 更新為正確的值"""
+    try:
+        sheet = _get_sheet().sheet1
+        cell = sheet.find(str(msg_id))
+        if cell:
+            # D欄=分類, J欄=預算類別, K欄=屬性（根據 save_expense 的欄位順序）
+            sheet.update_cell(cell.row, 4, category)   # D = 分類
+            sheet.update_cell(cell.row, 10, budget)    # J = 預算類別
+            sheet.update_cell(cell.row, 11, attr)      # K = 屬性
+            return f'✏️ 已將這筆資料分類更新為【{category}】'
+        return '⚠️ 找不到對應資料列，請手動更新'
+    except Exception as e:
+        return f'❌ 回填失敗: {e}'
+
+
 def classify_item(item, keyword_config):
     item_lower = item.lower()
     for cfg in keyword_config:

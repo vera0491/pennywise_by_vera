@@ -55,11 +55,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # 選擇分類後新增關鍵字
-    # callback_data 格式：kw_add|關鍵字|budget|category|attr
+    # callback_data 格式：kw_add|關鍵字|budget|category|attr|msg_id
     if data.startswith('kw_add|'):
-        _, keyword, budget, category, attr = data.split('|')
-        result = pennywise_tools.add_keyword_to_sheet(keyword, budget, category, attr)
-        await query.edit_message_text(result)
+        parts = data.split('|')
+        _, keyword, budget, category, attr, msg_id = parts
+        # 1. 把關鍵字寫入 keywords sheet
+        kw_result = pennywise_tools.add_keyword_to_sheet(keyword, budget, category, attr)
+        # 2. 回填這筆資料的分類
+        backfill_result = pennywise_tools.backfill_category(msg_id, category, budget, attr)
+        await query.edit_message_text(f'{kw_result}\n{backfill_result}')
         return
 
     await query.edit_message_text('❌ 未知選項')
@@ -133,7 +137,7 @@ async def process_data(update: Update, is_edit=False):
             keyboard = []
             for cat in categories:
                 label = f"{cat['category']}（{cat['budget']}）"
-                cb = f"kw_add|{keyword}|{cat['budget']}|{cat['category']}|{cat['attr']}"
+                cb = f"kw_add|{keyword}|{cat['budget']}|{cat['category']}|{cat['attr']}|{msg_id}"
                 # Telegram callback_data 限制 64 bytes
                 if len(cb.encode('utf-8')) <= 64:
                     keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
