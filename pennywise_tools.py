@@ -1,4 +1,5 @@
-import os, json
+import os
+import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
@@ -34,6 +35,51 @@ def load_keywords_from_sheet():
         print(f'⚠️ 無法讀取關鍵字設定: {e}')
         return []
 
+
+def get_all_categories():
+    """讀取 keywords sheet，回傳所有不重複的分類清單（含 budget 和 attr）"""
+    try:
+        rows = _get_sheet().worksheet('keywords').get_all_values()
+        seen = set()
+        result = []
+        for row in rows[1:]:
+            if len(row) < 3 or not row[1]:
+                continue
+            key = (row[0].strip(), row[1].strip(), row[2].strip())
+            if key not in seen:
+                seen.add(key)
+                result.append({
+                    'budget':   row[0].strip(),
+                    'category': row[1].strip(),
+                    'attr':     row[2].strip(),
+                })
+        return result
+    except Exception as e:
+        print(f'⚠️ 無法讀取分類清單: {e}')
+        return []
+
+
+def add_keyword_to_sheet(keyword, budget, category, attr):
+    """把新關鍵字加到 keywords sheet 中對應分類的那一列"""
+    try:
+        ws = _get_sheet().worksheet('keywords')
+        rows = ws.get_all_values()
+        for i, row in enumerate(rows[1:], start=2):
+            if len(row) < 4:
+                continue
+            if row[0].strip() == budget and row[1].strip() == category and row[2].strip() == attr:
+                # 找到對應列，在關鍵字欄位附加
+                existing = row[3].strip()
+                new_keywords = f"{existing}, {keyword}" if existing else keyword
+                ws.update_cell(i, 4, new_keywords)
+                return f'✅ 已將「{keyword}」加入【{category}】'
+        # 找不到對應列，新增一列
+        ws.append_row([budget, category, attr, keyword])
+        return f'✅ 已將「{keyword}」加入【{category}】（新增列）'
+    except Exception as e:
+        return f'❌ 新增關鍵字失敗: {e}'
+
+
 def classify_item(item, keyword_config):
     item_lower = item.lower()
     for cfg in keyword_config:
@@ -41,6 +87,7 @@ def classify_item(item, keyword_config):
             if kw.lower() in item_lower:
                 return cfg['category'], cfg['budget'], cfg['attr']
     return 'N/A', 'N/A', 'N/A'
+
 
 def _get_rows(month=None):
     """讀取所有資料列，month 為 int 時只回傳該月"""
@@ -65,6 +112,7 @@ def _get_rows(month=None):
                 continue
         rows.append(row)
     return rows
+
 
 def get_summary_report(month=None):
     """本月總覽（或指定月份）"""
@@ -106,6 +154,7 @@ def get_summary_report(month=None):
     except Exception as e:
         return f'❌ 報表錯誤: {e}'
 
+
 def get_category_report(month=None):
     """依分類報表"""
     try:
@@ -125,12 +174,13 @@ def get_category_report(month=None):
         lines = [f'🍰 {label}分類報表', '=' * 22, f'💰 總支出: ${total}', '']
         for cat, amt in sorted(by_cat.items(), key=lambda x: -x[1]):
             pct = amt / total * 100
-            bar = '█' * int(pct / 5)  # 每 5% 一格
+            bar = '█' * int(pct / 5)
             lines.append(f'  {cat}: ${amt} ({pct:.0f}%) {bar}')
 
         return '\n'.join(lines)
     except Exception as e:
         return f'❌ 報表錯誤: {e}'
+
 
 def get_budget_report(month=None):
     """預算類別佔比（631 分析）"""
@@ -150,7 +200,6 @@ def get_budget_report(month=None):
             total += amount
             by_budget[budget] = by_budget.get(budget, 0) + amount
 
-        # 631 理想佔比
         ideal = {'生活開銷': 60, '儲蓄投資': 30, '風險彈性': 10}
 
         lines = [f'📊 {label}預算類別佔比（631）', '=' * 22, f'💰 總支出（不含轉帳）: ${total}', '']
@@ -166,6 +215,7 @@ def get_budget_report(month=None):
     except Exception as e:
         return f'❌ 報表錯誤: {e}'
 
+
 def update_expense(item, amount, category, budget, attr, who, payment, msg_id):
     try:
         sheet = _get_sheet().sheet1
@@ -179,6 +229,7 @@ def update_expense(item, amount, category, budget, attr, who, payment, msg_id):
         return save_expense(item, amount, category, budget, attr, who, payment, msg_id)
     except Exception as e:
         return f'❌ 修正失敗: {e}'
+
 
 def save_expense(item, amount, category, budget, attr, who, payment, msg_id):
     try:
