@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 def _get_sheet():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive'\]
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
     if creds_json:
         creds_dict = json.loads(creds_json)
