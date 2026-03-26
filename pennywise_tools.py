@@ -2,11 +2,18 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
+
 def _get_sheet():
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive'\]
+    creds_json = os.environ.get('GOOGLE_CREDENTIALS')
+    if creds_json:
+        creds_dict = json.loads(creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    else:
+        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
     client = gspread.authorize(creds)
     return client.open('Pennywise記帳本')
+
 
 def load_keywords_from_sheet():
     try:
