@@ -1,9 +1,6 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, ContextTypes,
-    MessageHandler, CommandHandler,
-    CallbackQueryHandler, filters
-)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+
 import pennywise_tools
 
 
@@ -54,34 +51,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text('略過，保持 N/A 分類。')
         return
 
-    # 第一步：選預算類別 → 格式 kw1|msg_id|預算類別
-    if data.startswith('kw1|'):
-        _, msg_id, budget = data.split('|', 2)
-        state = pending_keyword.get(msg_id)
-        if not state:
-            await query.edit_message_text('❌ 狀態已過期，請重新記帳。')
-            return
-
-        # 過濾出這個預算類別的分類
-        cats = [c for c in state['categories'] if c['budget'] == budget]
-        keyboard = []
-        for i, cat in enumerate(cats):
-            label = f"{cat['category']}（{cat['attr']}）"
-            cb = f"kw2|{msg_id}|{i}"  # 短！用索引
-            keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
-        keyboard.append([InlineKeyboardButton('略過', callback_data='kw_skip')])
-
-        # 把這個預算類別的 cats 存起來供第二步用
-        state['filtered'] = cats
-        pending_keyword[msg_id] = state
-
-        await query.edit_message_text(
-            f'「{state["keyword"]}」→ 【{budget}】\n請選擇細分類：',
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return
-
-    # 第二步：選細分類 → 格式 kw2|msg_id|index
+    # 選細分類 → 格式 kw2|msg_id|index（預算類別綁定在細分類上，不用另選）
     if data.startswith('kw2|'):
         _, msg_id, idx_str = data.split('|')
         state = pending_keyword.get(msg_id)
@@ -89,7 +59,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text('❌ 狀態已過期，請重新記帳。')
             return
 
-        cat = state['filtered'][int(idx_str)]
+        cat = state['categories'][int(idx_str)]
         keyword  = state['keyword']
         budget   = cat['budget']
         category = cat['category']
@@ -164,16 +134,16 @@ async def process_data(update: Update, is_edit=False):
             # 存狀態
             pending_keyword[msg_id] = {'keyword': keyword, 'categories': categories}
 
-            # 第一步：列出預算類別
-            budgets  = sorted(set(c['budget'] for c in categories))
+            # 直接列出所有細分類（預算類別已綁定在細分類上）
             keyboard = []
-            for b in budgets:
-                cb = f"kw1|{msg_id}|{b}"
-                keyboard.append([InlineKeyboardButton(b, callback_data=cb)])
+            for i, cat in enumerate(categories):
+                label = f"{cat['category']}（{cat['attr']}）"
+                cb = f"kw2|{msg_id}|{i}"
+                keyboard.append([InlineKeyboardButton(label, callback_data=cb)])
             keyboard.append([InlineKeyboardButton('略過', callback_data='kw_skip')])
 
             await msg.reply_text(
-                f'「{keyword}」找不到分類，要加入關鍵字清單嗎？\n請先選預算類別：',
+                f'「{keyword}」找不到分類，要加入關鍵字清單嗎？\n請選細分類：',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
