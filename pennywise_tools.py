@@ -239,7 +239,7 @@ def update_expense(item, amount, category, budget, attr, who, payment, msg_id):
         if cell:
             sheet.update(
                 f'D{cell.row}:K{cell.row}',
-                [[category, item, amount, who, payment, str(msg_id), budget, attr]]
+                [[category, item, int(amount), who, payment, str(msg_id), budget, attr]]
             )
             return f'✏️ 已修正: {item} ${amount}'
         return save_expense(item, amount, category, budget, attr, who, payment, msg_id)
@@ -255,7 +255,7 @@ def save_expense(item, amount, category, budget, attr, who, payment, msg_id):
             now.strftime('%Y-%m-%d'),
             f"週{['一','二','三','四','五','六','日'][now.weekday()]}",
             now.strftime('%H:%M:%S'),
-            category, item, amount, who, payment, str(msg_id), budget, attr
+            category, item, int(amount), who, payment, str(msg_id), budget, attr
         ]
         sheet.append_row(row)
         return '☁️ 已同步上雲端'
